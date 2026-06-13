@@ -19,7 +19,6 @@
 
 void initCorePeripherals(void)
 {
-
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
   LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
   LL_SYSCFG_EnablePinRemap(LL_SYSCFG_PIN_RMP_PA11);
@@ -28,11 +27,11 @@ void initCorePeripherals(void)
   SystemClock_Config();
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_COMP2_Init();
-  MX_TIM1_Init();
-  MX_TIM2_Init();
+  MX_COMP2_Init(); // 过零比较器
+  MX_TIM1_Init();  // 三相电机 PWM 驱动
+  MX_TIM2_Init();  // 测量换相间隔、BEMF 时间
 #ifdef USE_TIMER_3_CHANNEL_1
-  MX_TIM3_Init();
+  MX_TIM3_Init(); // 接收 DShot/PWM/CRSF
 #endif
 #ifdef USE_TIMER_16_CHANNEL_1
   MX_TIM16_Init();
@@ -40,12 +39,12 @@ void initCorePeripherals(void)
 #ifdef N_VARIANT
   MX_COMP1_Init();
 #endif
-  MX_TIM14_Init();
-  MX_TIM17_Init();
-  MX_TIM6_Init();
+  MX_TIM14_Init(); // 换相延时
+  MX_TIM17_Init(); // 延时
+  MX_TIM6_Init();  // 10 kHz 控制循环
   telem_UART_Init();
 #ifdef USE_LED_STRIP
-  WS2812_Init();
+  WS2812_Init(); // 单总线LED控制
 #endif
 }
 

@@ -378,13 +378,13 @@ uint16_t stall_protect_minimum_duty = DEAD_TIME;
 char desync_check = 0;
 char low_kv_filter_level = 20;
 
-uint16_t tim1_arr = TIM1_AUTORELOAD;           // current auto reset value
-uint16_t TIMER1_MAX_ARR = TIM1_AUTORELOAD;     // maximum auto reset register value
-uint16_t duty_cycle_maximum = TIM1_AUTORELOAD; // restricted by temperature or low rpm throttle protect
-uint16_t low_rpm_level = 20;                   // thousand erpm used to set range for throttle resrictions
-uint16_t high_rpm_level = 70;                  //
-uint16_t throttle_max_at_low_rpm = 400;
-uint16_t throttle_max_at_high_rpm = TIM1_AUTORELOAD;
+uint16_t tim1_arr = TIM1_AUTORELOAD;                 // current auto reset value
+uint16_t TIMER1_MAX_ARR = TIM1_AUTORELOAD;           // maximum auto reset register value
+uint16_t duty_cycle_maximum = TIM1_AUTORELOAD;       // restricted by temperature or low rpm throttle protect
+uint16_t low_rpm_level = 20;                         // thousand erpm used to set range for throttle resrictions
+uint16_t high_rpm_level = 70;                        //
+uint16_t throttle_max_at_low_rpm = 400;              // 低转速时允许的最大占空比
+uint16_t throttle_max_at_high_rpm = TIM1_AUTORELOAD; // 高转速时允许的最大占空比
 
 uint16_t commutation_intervals[6] = {0};
 uint32_t average_interval = 0;
@@ -500,7 +500,9 @@ uint8_t dshotcommand;
 uint16_t armed_count_threshold = 1000;
 
 char armed = 0;
-uint16_t zero_input_count = 0;
+
+// 只有在油门最低并保持一段时间后，才允许电机启动。防止一上电或一连接信号就突然转动
+uint16_t zero_input_count = 0; // 是连续检测到"油门为 0"的计数器，主要用于 ESC 的解锁安全机制。
 
 uint16_t input = 0;
 uint16_t newinput = 0;
@@ -1658,6 +1660,7 @@ void zcfoundroutine()
         }
     }
 }
+
 #ifdef BRUSHED_MODE
 void runBrushedLoop()
 {
@@ -1727,11 +1730,13 @@ void runBrushedLoop()
 
 int main(void)
 {
+    // 从bootloader跳过来，重新设置中断向量表
+    initAfterJump(); //
 
-    initAfterJump();
+    initCorePeripherals(); // 外设初始化
 
-    initCorePeripherals();
-
+    /* 打开 TIM1 通道 的输出开关
+    让 各个Channel 开始输出 PWM 波形。*/
     LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH1);
     LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH2);
     LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH3);
@@ -1739,23 +1744,24 @@ int main(void)
     LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH2N);
     LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH3N);
 
-#ifdef MCU_G071
-    LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH5); // timer used for comparator blanking
-#endif
+    // 消隐定时器
+    LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH5);
+
     //  LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH4);      // timer used for timing adc read
     //  TIM1->CCR4 = 100;  // set in 10khz loop to match pwm cycle timed to end of pwm on
-    /* Enable counter */
+
+    /* 	启动定时器计数
+    这个执行的先后顺序和MCU有关，最终目的是让引脚上输出 PWM */
     LL_TIM_EnableCounter(TIM1);
     LL_TIM_EnableAllOutputs(TIM1);
-    /* Force update generation */
+
+    /* 手动刷新一次 TIM1 的所有预装载值，并让计数器从 0 重新开始计数，确保 PWM 初始化后的状态正确、同步。 */
     LL_TIM_GenerateEvent_UPDATE(TIM1);
     // LL_TIM_EnableIT_UPDATE(TIM1);
-#ifdef USE_ADC_INPUT
 
-#else
-    LL_TIM_CC_EnableChannel(IC_TIMER_REGISTER, IC_TIMER_CHANNEL); // input capture and output compare
+    // 飞控油门信号接收，PWM或者数字编码信号，具体取决于使用的协议格式
+    LL_TIM_CC_EnableChannel(IC_TIMER_REGISTER, IC_TIMER_CHANNEL);
     LL_TIM_EnableCounter(IC_TIMER_REGISTER);
-#endif
 
 #ifdef USE_LED_STRIP
     send_LED_RGB(255, 0, 0);
@@ -1769,45 +1775,54 @@ int main(void)
 #endif
 
 #ifndef BRUSHED_MODE
-    LL_TIM_EnableCounter(COM_TIMER); // commutation_timer priority 0
+    // 计算换向延时用
+    LL_TIM_EnableCounter(COM_TIMER);
     LL_TIM_GenerateEvent_UPDATE(COM_TIMER);
     LL_TIM_EnableIT_UPDATE(COM_TIMER);
-    COM_TIMER->DIER &= ~((0x1UL << (0U))); // disable for now.
+    COM_TIMER->DIER &= ~((0x1UL << (0U))); // 先关闭更新中断。检测到过零时打开，过零一段时间后再换向
 #endif
+
     LL_TIM_EnableCounter(UTILITY_TIMER);
     LL_TIM_GenerateEvent_UPDATE(UTILITY_TIMER);
-    //
+
     LL_TIM_EnableCounter(INTERVAL_TIMER);
     LL_TIM_GenerateEvent_UPDATE(INTERVAL_TIMER);
 
     LL_TIM_EnableCounter(TEN_KHZ_TIMER); // 10khz timer
     LL_TIM_GenerateEvent_UPDATE(TEN_KHZ_TIMER);
-    TEN_KHZ_TIMER->DIER |= (0x1UL << (0U)); // enable interrupt
-                                            // RCC->APB2ENR  &= ~(1 << 22);  // turn debug off
+    TEN_KHZ_TIMER->DIER |= (0x1UL << (0U)); // 启用中断
+
 #ifdef USE_ADC
-    ADC_Init();
-    enableADC_DMA();
-    activateADC();
+    ADC_Init();      // 初始化ADC，采集电流、电压、芯片温度
+    enableADC_DMA(); // 激活DMA传输ADC数据
+    activateADC();   // 激活ADC
 #endif
 
 #ifndef MCU_F031
     __IO uint32_t wait_loop_index = 0;
     /* Enable comparator */
     LL_COMP_Enable(MAIN_COMP);
+
 #ifdef N_VARIANT // needs comp 1 and 2
     LL_COMP_Enable(COMP1);
 #endif
+
+    // 比较器内部有一个 voltage scaler（电压缩放器），用于设置比较阈值。这个电路从初始化到输出稳定需要一定时间。
+    // 如果不等这段时间就读取比较器输出：比较结果可能不稳定、可能产生虚假过零信号，导致换相错误
     wait_loop_index = ((LL_COMP_DELAY_STARTUP_US * (SystemCoreClock / (100000 * 2))) / 10);
     while (wait_loop_index != 0)
     {
         wait_loop_index--;
     }
+
 #endif
 
+    /* 加载参数 */
     loadEEpromSettings();
     //  EEPROM_VERSION = *(uint8_t*)(0x08000FFC);
     if (firmware_info.version_major != eepromBuffer[3] || firmware_info.version_minor != eepromBuffer[4])
     {
+        // 如果固件有更新，重置EEPROM中的数据，避免因为数据结构变化导致的错误。
         eepromBuffer[3] = firmware_info.version_major;
         eepromBuffer[4] = firmware_info.version_minor;
         for (int i = 0; i < 12; i++)
@@ -1817,10 +1832,13 @@ int main(void)
         saveEEpromSettings();
     }
 
-    if (use_sin_start)
+    if (use_sin_start) // 如果使用弦波启动
     {
-        min_startup_duty = sin_mode_min_s_d;
+        min_startup_duty = sin_mode_min_s_d; // 最小启动占空比和六步换相不一样
     }
+
+    /* 是否反转
+    针对接线接反的情况，只需要修改一下该标志位即可，不用重新焊接 */
     if (dir_reversed == 1)
     {
         forward = 0;
@@ -1829,15 +1847,27 @@ int main(void)
     {
         forward = 1;
     }
+
     tim1_arr = TIMER1_MAX_ARR;
+
+    // 数据转换，把启动时最大启动占空比，转换为适配当前TIMER的CCR值
+    // 例如最大占空比是30%，TIMER1的ARR数值是1500，那么CCR的数值应该是450，才能得到30%的占空比。
+    // 又因为有死区，所以额外加上死区补偿值，确保实际输出的占空比能达到预期的30%
     startup_max_duty_cycle = startup_max_duty_cycle * TIMER1_MAX_ARR / 2000 + dead_time_override; // adjust for pwm frequency
-    throttle_max_at_low_rpm = throttle_max_at_low_rpm * TIMER1_MAX_ARR / 2000;                    // adjust to new pwm frequency
-    throttle_max_at_high_rpm = TIMER1_MAX_ARR;                                                    // adjust to new pwm frequency
+
+    // 低转速时允许的最大占空比换算
+    throttle_max_at_low_rpm = throttle_max_at_low_rpm * TIMER1_MAX_ARR / 2000; // adjust to new pwm frequency
+    // 高转速时允许的最大占空比换算
+    throttle_max_at_high_rpm = TIMER1_MAX_ARR; // adjust to new pwm frequency
+
     if (!comp_pwm)
     {
-        use_sin_start = 0; // sine start requires complementary pwm.
+        // 如果硬件没有启用互补PWM，就强制关闭正弦启动模式。
+        use_sin_start = 0;
     }
 
+    /* 针对车模模式进行参数修改
+     车模和多旋翼的负载特性不一样 */
     if (RC_CAR_REVERSE)
     { // overrides a whole lot of things!
         throttle_max_at_low_rpm = 1000;
@@ -1853,18 +1883,13 @@ int main(void)
         min_startup_duty = min_startup_duty + 50;
     }
 
-#ifdef MCU_F031
-    GPIOF->BSRR = LL_GPIO_PIN_6; // uncomment to take bridge out of standby mode and set oc level
-    GPIOF->BRR = LL_GPIO_PIN_7;  // out of standby mode
-    GPIOA->BRR = LL_GPIO_PIN_11;
-#endif
-
 #ifdef USE_CRSF_INPUT
     inputSet = 1;
     playStartupTune();
     MX_IWDG_Init();
     LL_IWDG_ReloadCounter(IWDG);
 #else
+
 #if defined(FIXED_DUTY_MODE) || defined(FIXED_SPEED_MODE)
     MX_IWDG_Init();
     LL_IWDG_ReloadCounter(IWDG);
@@ -1888,11 +1913,14 @@ int main(void)
     maskPhaseInterrupts();
     playBrushedStartupTune();
 #else
-    playStartupTune();
+    playStartupTune(); /* 让电机发出启动音乐 */
 #endif
+
     zero_input_count = 0;
+
     MX_IWDG_Init();
     LL_IWDG_ReloadCounter(IWDG);
+
 #ifdef GIMBAL_MODE
     bi_direction = 1;
     use_sin_start = 1;
@@ -1901,16 +1929,17 @@ int main(void)
 #ifdef USE_ADC_INPUT
     armed_count_threshold = 5000;
     inputSet = 1;
-
 #else
-#ifdef RHINO80A_F051
-    LL_GPIO_SetPinPull(INPUT_PIN_PORT, INPUT_PIN, LL_GPIO_PULL_UP);
-#else
+    /* 可能是外部刷写工具要更新固件
+    可能是飞控未启动
+    可能是信号线接错 */
     checkForHighSignal(); // will reboot if signal line is high for 10ms
-#endif
-    receiveDshotDma();
+
+    receiveDshotDma(); // 接收飞控发过来的命令
+
     if (drive_by_rpm)
     {
+        // 如果是通过转速来控制的，那么就启用速度控制环，直接把输入当成转速目标，PID调节占空比来达到目标转速
         use_speed_control_loop = 1;
     }
 #endif
@@ -1918,53 +1947,54 @@ int main(void)
 #endif // end fixed duty mode ifdef
 #endif // end crsf input
 
-#ifdef MCU_F051
-    MCU_Id = DBGMCU->IDCODE &= 0xFFF;
-    REV_Id = DBGMCU->IDCODE >> 16;
-
-    if (REV_Id >= 4096)
-    {
-        temperature_offset = 0;
-    }
-    else
-    {
-        temperature_offset = 230;
-    }
-
-#endif
     while (1)
     {
-
-        LL_IWDG_ReloadCounter(IWDG);
+        LL_IWDG_ReloadCounter(IWDG); // 喂狗
 
         adc_counter++;
-        if (adc_counter > 10)
-        {                                     // for adc and telemetry
-            ADC_CCR = TIM1->CCR3 * 2 / 3 + 1; // sample current at quarter pwm on
+        if (adc_counter > 10) // 降低频率
+        {
+            // timer1的channel4没启用，所以这一段目前没用
+            // 预期作用：把ADC采样的时刻和PWM输出的时刻同步，确保在电流较为稳定的时候去采集数据
+            ADC_CCR = TIM1->CCR3 * 2 / 3 + 1;
             if (ADC_CCR > tim1_arr)
             {
                 ADC_CCR = tim1_arr;
             }
             TIM1->CCR4 = ADC_CCR;
 
+            // 获取温度值，转换成摄氏度，滤波
             ADC_raw_temp = ADC_raw_temp - (temperature_offset);
             converted_degrees = __LL_ADC_CALC_TEMPERATURE(3300, ADC_raw_temp, LL_ADC_RESOLUTION_12B);
             degrees_celsius = ((7 * degrees_celsius) + converted_degrees) >> 3;
 
+            // 获取电压值，转换成实际电压，滤波
             battery_voltage = ((7 * battery_voltage) + ((ADC_raw_volts * 3300 / 4095 * VOLTAGE_DIVIDER) / 100)) >> 3;
+            // smoothed = (63 × 旧值 + 1 × 新值) / 64
+            // 电流采样噪声大，所以用很重的平滑，让电流值变化更平稳，避免保护电路误触发。
             smoothed_raw_current = ((63 * smoothed_raw_current + (ADC_raw_current)) >> 6);
+            /*12 位 ADC、3.3 V 参考电压，理论上是 raw * 3300 / 4095（单位 mV）。
+            这里用 / 41 近似 / 4095 * 100，相当于把结果放大 100 倍，变成 0.01 mV（百分之一毫伏） 的固定点精度，避免浮点运算。
+            MILLIVOLT_PER_AMP： 表示电流传感器每安培输出多少毫伏（mV/A），即运放的放大倍数 */
             actual_current = ((smoothed_raw_current * 3300 / 41) - (CURRENT_OFFSET * 100)) / (MILLIVOLT_PER_AMP);
             if (actual_current < 0)
             {
                 actual_current = 0;
             }
 
+            // 重新开始ADC采样
             LL_ADC_REG_StartConversion(ADC1);
 
+            // 低压截止保护 功能：当电池电压过低时，自动关闭电机，防止电池过放损坏。
+            // 用户可配置参数
             if (LOW_VOLTAGE_CUTOFF)
             {
+                // 电池电压低于每节电池的截止电压乘以电池数量时，增加低电压计数器。
                 if (battery_voltage < (cell_count * low_cell_volt_cutoff))
                 {
+                    /*如果电池持续低压，且持续的时间超过了设定阈值（正弦启动时阈值更低、反应更快），就立即停机保护电池。
+                    正弦启动时电机电流大、电池负载重，电压跌落更明显，也更容易把电池电压拉得过低。所以在这段时间里，
+                    低压保护稍微敏感一点，提前约 900 个计数周期动作，防止电池在启动大电流冲击下被过放。*/
                     low_voltage_count++;
                     if (low_voltage_count > (20000 - (stepper_sine * 900)))
                     {
@@ -1982,6 +2012,7 @@ int main(void)
                 }
             }
             adc_counter = 0;
+
 #ifdef USE_ADC_INPUT
             if (ADC_raw_input < 10)
             {
@@ -1993,8 +2024,8 @@ int main(void)
             }
 #endif
         }
-#ifdef USE_ADC_INPUT
 
+#ifdef USE_ADC_INPUT
         signaltimeout = 0;
         ADC_smoothed_input = (((10 * ADC_smoothed_input) + ADC_raw_input) / 11);
         newinput = ADC_smoothed_input / 2;
@@ -2003,31 +2034,40 @@ int main(void)
             newinput = 2000;
         }
 #endif
+
         stuckcounter = 0;
 
+        // 双向旋转模式，非DSHOT模式（DSHOT是数据命令接收模式）
         if (bi_direction == 1 && dshot == 0)
         {
-            if (RC_CAR_REVERSE)
+            if (RC_CAR_REVERSE) // 给攀爬车准备的
             {
+                // 命令为正转
                 if (newinput > (1000 + (servo_dead_band << 1)))
                 {
+                    // 电机方向和输入方向相反
                     if (forward == dir_reversed)
                     {
-                        adjusted_input = 0;
-                        if (running)
+                        adjusted_input = 0; // 先不给电机驱动力
+                        if (running)        // 如果电机正在转
                         {
-                            prop_brake_active = 1;
+                            prop_brake_active = 1; // 开启刹车，把电机刹停
                         }
                         else
                         {
+                            // 如果电机本来就停了，直接切换方向标志为正转
                             forward = 1 - dir_reversed;
                         }
                     }
+
+                    // 如果当前没有在刹车，就把 PWM 输入映射成内部油门值
                     if (prop_brake_active == 0)
                     {
                         adjusted_input = map(newinput, 1000 + (servo_dead_band << 1), 2000, 47, 2047);
                     }
                 }
+
+                // 命令为反转，其余逻辑和正转类似
                 if (newinput < (1000 - (servo_dead_band << 1)))
                 {
                     if (forward == (1 - dir_reversed))
@@ -2048,33 +2088,51 @@ int main(void)
                     }
                 }
 
+                // 是否在死区，如果在死区就不给电机驱动力，顺便把刹车状态也关了。
                 if (newinput >= (1000 - (servo_dead_band << 1)) && newinput <= (1000 + (servo_dead_band << 1)))
                 {
                     adjusted_input = 0;
                     prop_brake_active = 0;
                 }
             }
-            else
+            else // 不是攀爬车，普通双向控制
             {
+                // 命令为正向旋转
                 if (newinput > (1000 + (servo_dead_band << 1)))
                 {
-                    if (forward == dir_reversed)
+                    if (forward == dir_reversed) // 电机当前方向和命令相反
                     {
+                        /*commutation_interval：两次换相之间的时间间隔，单位是微秒或定时器 tick。
+                                                这个值越大，表示电机转得越慢。
+                        reverse_speed_threshold：允许反向的转速阈值。
+                                                当 commutation_interval > reverse_speed_threshold 时，说明电机已经转得够慢了，可以安全换向。
+                        stepper_sine：如果当前还在正弦启动阶段，也允许换向。*/
                         if ((commutation_interval > reverse_speed_threshold) || stepper_sine)
                         {
-                            forward = 1 - dir_reversed;
-                            zero_crosses = 0;
+                            forward = 1 - dir_reversed; // 把方向标志切到正转
+                            zero_crosses = 0;           // 清零过零计数，重新检测 BEMF
+
+                            /* 回到开环/旧检测模式
+                             屏蔽换相中断，改为在主循环里检测过零，这样可以在换向时有更大的容错，避免因为过零检测不准导致的电机抖动或熄火。
+                             换相节奏更保守，适合启动、失步恢复、方向切换等不稳定状态。 */
                             old_routine = 1;
-                            maskPhaseInterrupts();
-                            brushed_direction_set = 0;
+                            maskPhaseInterrupts();     // 屏蔽换相中断
+                            brushed_direction_set = 0; // 有刷模式方向标志复位
                         }
                         else
                         {
+                            /*如果电机反转还很快，现在强行切正转会冲击电调和电机。
+                            所以把油门强制置为中位（1000），相当于让电机自由滑行减速，等转速降下来 */
+                            newinput = 1000;
                             newinput = 1000;
                         }
                     }
+
+                    // 获取调整后的油门数值
                     adjusted_input = map(newinput, 1000 + (servo_dead_band << 1), 2000, 47, 2047);
                 }
+
+                // 命令为反向，其它和正向测代码一致
                 if (newinput < (1000 - (servo_dead_band << 1)))
                 {
                     if (forward == (1 - dir_reversed))
@@ -2102,9 +2160,9 @@ int main(void)
                 }
             }
         }
-        else if (dshot && bi_direction)
+        else if (dshot && bi_direction) // 双向旋转 + DSHOT（数字协议）模式，除了命令值范围不一样，逻辑和上面类似
         {
-            if (newinput > 1047)
+            if (newinput > 1047) // 正转
             {
 
                 if (forward == dir_reversed)
@@ -2124,7 +2182,7 @@ int main(void)
                 }
                 adjusted_input = ((newinput - 1048) * 2 + 47) - reversing_dead_band;
             }
-            if (newinput <= 1047 && newinput > 47)
+            if (newinput <= 1047 && newinput > 47) // 反转
             {
                 //	startcount++;
 
@@ -2145,21 +2203,25 @@ int main(void)
                 }
                 adjusted_input = ((newinput - 48) * 2 + 47) - reversing_dead_band;
             }
-            if (newinput < 48)
+
+            if (newinput < 48) // 停转
             {
                 adjusted_input = 0;
                 brushed_direction_set = 0;
             }
         }
-        else
+        else // 其它模式，直接把输入映射成油门值
         {
             adjusted_input = newinput;
         }
-#ifndef BRUSHED_MODE
 
+#ifndef BRUSHED_MODE
         if ((zero_crosses > 1000) || (adjusted_input == 0))
         {
+            /* 电机已经成功检测了很多次过零点，说明运行稳定。之前累计的超时计数可能是偶发噪声，清零 */
+            /* 油门为 0，电机本来就在停转或自由滑行，没有 BEMF 是正常的，不算故障 */
             bemf_timeout_happened = 0;
+
 #ifdef USE_RGB_LED
             if (adjusted_input == 0 && armed)
             {
@@ -2171,59 +2233,75 @@ int main(void)
         }
         if (zero_crosses > 100 && adjusted_input < 200)
         {
+            /* 经成功检测了一些过零点（zero_crosses > 100），但油门很低（adjusted_input < 200）
+               低转速时 BEMF 信号弱，容易误报超时，所以清零。 */
             bemf_timeout_happened = 0;
         }
         if (use_sin_start && adjusted_input < 160)
         {
+            /* 正在使用正弦启动（开环拖动），此时根本不走 BEMF 检测流程。
+               低油门下更不需要判断 BEMF 超时 */
             bemf_timeout_happened = 0;
         }
 
-        if (crawler_mode)
+        if (crawler_mode) // 车模模式
         {
             if (adjusted_input < 400)
             {
+                /* 爬行模式下车速极慢，电机转速很低，BEMF 信号非常弱甚至断断续续。
+                   这种情况下很容易发生 BEMF 超时，但其实电机并没有卡死，只是在慢慢爬。
+                   所以低油门时（adjusted_input < 400），直接把超时计数器清零，不触发任何保护。 */
                 bemf_timeout_happened = 0;
             }
         }
         else
         {
+            /* 这里调整的是超时阈值 */
             if (adjusted_input < 150)
-            { // startup duty cycle should be low enough to not burn motor
+            {
+                /* 启动时占空比很低，电机慢慢加速，BEMF 弱是正常的。把阈值放宽到 100，避免启动阶段就误触发保护。 */
                 bemf_timeout = 100;
             }
             else
             {
-                bemf_timeout = 10;
+                bemf_timeout = 10; // 正常油门时严格
             }
         }
+
+        /* 当连续检测不到反电动势过零点的时间超过阈值 && 开启了“转子卡死保护”功能 */
         if (bemf_timeout_happened > bemf_timeout * (1 + (crawler_mode * 100)) && stuck_rotor_protection)
         {
-            allOff();
-            maskPhaseInterrupts();
-            input = 0;
-            bemf_timeout_happened = 102;
+            allOff();                    // 关闭所有 MOSFET，停止驱动电机
+            maskPhaseInterrupts();       // 屏蔽比较器中断
+            input = 0;                   // 内部油门清零
+            bemf_timeout_happened = 102; // 把计数固定在一个很大的值，确保一定会触发保护逻辑
+
 #ifdef USE_RGB_LED
             GPIOB->BRR = LL_GPIO_PIN_8;  // on red
             GPIOB->BSRR = LL_GPIO_PIN_5; //
             GPIOB->BSRR = LL_GPIO_PIN_3;
 #endif
         }
-        else
+        else // 调整参数，正常驱动电机
         {
 #ifdef FIXED_DUTY_MODE
             input = FIXED_DUTY_MODE_POWER * 20 + 47;
 #else
-            if (use_sin_start)
+            if (use_sin_start) // 正弦启动
             {
                 if (adjusted_input < 30)
-                { // dead band ?
+                {
+                    // 死区，不输出油门
                     input = 0;
                 }
 
+                // 正弦启动阶段，把油门输入映射成一个较低的范围，给电机一个温和的启动过程，保护电机和电调，适合需要平稳启动的应用，例如车模、机械臂等。
                 if (adjusted_input > 30 && adjusted_input < (sine_mode_changeover_thottle_level * 20))
                 {
                     input = map(adjusted_input, 30, (sine_mode_changeover_thottle_level * 20), 47, 160);
                 }
+
+                // 正常换相区
                 if (adjusted_input >= (sine_mode_changeover_thottle_level * 20))
                 {
                     input = map(adjusted_input, (sine_mode_changeover_thottle_level * 20), 2047, 160, 2047);
@@ -2231,19 +2309,28 @@ int main(void)
             }
             else
             {
+                /* 速度控制环总开关。
+                   当它开启时，ESC 不再直接把 adjusted_input 当油门
+                   而是用 PID 计算一个油门修正量 input_override，再用它驱动电机 */
                 if (use_speed_control_loop)
                 {
+                    /* “按转速驱动”模式，也就是把油门输入映射成目标电机转速，ESC 自动用 PID 调节占空比来维持这个转速
+                       适合需要精确控制转速的应用，例如风扇、水泵等 */
                     if (drive_by_rpm)
                     {
+                        // 计算电气换相周期
                         target_e_com_time = 60000000 / map(adjusted_input, 47, 2047, MINIMUM_RPM_SPEED_CONTROL, MAXIMUM_RPM_SPEED_CONTROL) / (motor_poles / 2);
+
+                        // 死区
                         if (adjusted_input < 47)
-                        { // dead band ?
+                        {
                             input = 0;
                             speedPid.error = 0;
                             input_override = 0;
                         }
                         else
                         {
+                            // 在10KHz中断里计算，这里直接获取PID输出的占空比覆盖掉原来的油门输入
                             input = (uint16_t)input_override; // speed control pid override
                             if (input_override > 2047)
                             {
@@ -2257,7 +2344,6 @@ int main(void)
                     }
                     else
                     {
-
                         input = (uint16_t)input_override; // speed control pid override
                         if (input_override > 2047)
                         {
@@ -2271,67 +2357,84 @@ int main(void)
                 }
                 else
                 {
-
+                    // 普通模式，直接把调整后的油门输入给电机
                     input = adjusted_input;
                 }
             }
 #endif
         }
-        if (stepper_sine == 0)
-        {
 
-            e_rpm = running * (600000 / e_com_time); // in tens of rpm
-            k_erpm = e_rpm / 10;                     // ecom time is time for one electrical revolution in microseconds
+        if (stepper_sine == 0) // 正常的六步换向模式
+        {
+            // 6 次换相 = 360° 电角度 = 1 个电气周期
+            // e_com_time： 一个电气周期的时间，单位 µs
+            // 电气转速：每分钟完成多少个电气周期
+            // e_rpm： 电气转速的 1/100，即 "百eRPM"
+            // k_erpm： 电气转速的 1/1000，即 "千eRPM"
+            e_rpm = running * (600000 / e_com_time); // = (60,000,000 / e_com_time) / 100
+            k_erpm = e_rpm / 10;                     // 转换成小数据，节省空间、方便比较、避免大数运算
 
             if (low_rpm_throttle_limit)
-            { // some hardware doesn't need this, its on by default to keep hardware / motors protected but can slow down the response in the very low end a little.
+            {
+                // some hardware doesn't need this, its on by default to keep hardware / motors protected but can slow down the response in the very low end a little.
 
+                // 低转速时，限制最大油门，用于保护电调和电机
+                // 电机转速低的时候，反电动势很小，绕组阻抗也低。
+                // 如果这时给 full throttle（大占空比）
+                // 电流会非常大，容易：烧毁 MOS、退磁电机、触发过流保护、损坏电池
                 duty_cycle_maximum = map(k_erpm, low_rpm_level, high_rpm_level, throttle_max_at_low_rpm, throttle_max_at_high_rpm); // for more performance lower the high_rpm_level, set to a consvervative number in source.
             }
 
+            /* 温度过高时，限制最大油门，用于保护电调和电机 */
             if (degrees_celsius > TEMPERATURE_LIMIT)
             {
                 duty_cycle_maximum = map(degrees_celsius, TEMPERATURE_LIMIT - 10, TEMPERATURE_LIMIT + 10, throttle_max_at_high_rpm / 2, 1);
             }
 
+            // zero_crosses < 100：刚启动，过零次数还很少
+            // commutation_interval > 500：换相周期大于 500，说明转速很低
+            // 根据电机转速，动态调整 比较器消隐时间 和 BEMF 过零检测滤波等级。
             if (zero_crosses < 100 || commutation_interval > 500)
             {
 #ifdef MCU_G071
-                TIM1->CCR5 = 100; // comparator blanking
+                TIM1->CCR5 = 100; // 消隐时间长，避开开关噪声
 #endif
-                filter_level = 12;
+                filter_level = 12; // 重滤波，防止误判
             }
             else
             {
 #ifdef MCU_G071
-                TIM1->CCR5 = 5;
+                TIM1->CCR5 = 5; // 消隐时间很短，因为高速时 BEMF 强，不需要屏蔽太久
 #endif
-                filter_level = map(average_interval, 100, 500, 3, 10);
+                filter_level = map(average_interval, 100, 500, 3, 10); // 转速越快，滤波等级越低，响应更快；转速越慢，滤波等级越高，稳定性更好
             }
             if (commutation_interval < 100)
             {
+                // 换向间隔小于100us，说明转速已经很高了，BEMF 信号很强，几乎不受噪声干扰了，可以把滤波等级调到最低，获得最快的响应。
                 filter_level = 2;
             }
 
             if (motor_kv < 500)
             {
-
+                // 针对低 KV 电机的额外滤波加强
                 filter_level = filter_level * 2;
             }
 
             /**************** old routine*********************/
-            if (old_routine && running)
+            if (old_routine && running) // 手动查询过零点 && 电机正在转
             {
-                maskPhaseInterrupts();
-                getBemfState();
-                if (!zcfound)
+                maskPhaseInterrupts(); // 关闭比较器中断
+                getBemfState();        // 主动读取比较器输出电平
+                if (!zcfound)          // 如果还没找到过零点
                 {
-                    if (rising)
+                    if (rising) // 期望上升沿过零
                     {
+                        // bemfcounter：连续检测到预期状态的次数
                         if (bemfcounter > min_bemf_counts_up)
                         {
-                            zcfound = 1;
-                            zcfoundroutine();
+                            zcfound = 1; // 标记：找到过零点
+
+                            zcfoundroutine(); // 找到过零，执行换相
                         }
                     }
                     else
@@ -2344,17 +2447,32 @@ int main(void)
                     }
                 }
             }
+
+            // BEMF 超时处理，也就是 ESC 检测不到反电动势过零点时的自救逻辑。
+            // INTERVAL_TIMER->CNT：从上一次过零/换相到现在经过的时间
+            // >45000：太长时间没有检测到过零点
+            // running == 1：电机本来应该在转
             if (INTERVAL_TIMER->CNT > 45000 && running == 1)
             {
+                // 超时计数器 +1。这个值累积多了会触发前面说过的“转子卡死保护”
                 bemf_timeout_happened++;
 
+                // 关闭比较器中断。因为当前中断已经不可靠，继续开着可能误触发。
                 maskPhaseInterrupts();
+
+                // 切换到保守的 old_routine 模式，用轮询方式重新检测 BEMF
                 old_routine = 1;
+
+                // 如果油门已经很小（<48），说明用户松油门了，直接把电机判为不运行。
                 if (input < 48)
                 {
                     running = 0;
                 }
+
+                // 清零过零计数，重新积累
                 zero_crosses = 0;
+
+                // 强制推进一次换相。虽然没有真正检测到过零点，但 ESC 会按旧的换相时序“赌一把”，尝试让电机重新同步
                 zcfoundroutine();
                 // if(stall_protection){
                 // min_startup_duty = 130;
@@ -2365,8 +2483,8 @@ int main(void)
                 // }
             }
         }
-        else
-        { // stepper sine
+        else // 开环正弦启动模式
+        {    // stepper sine
 
 #ifdef GIMBAL_MODE
             step_delay = 300;
@@ -2396,66 +2514,75 @@ int main(void)
             }
 #else
 
-            if (input > 48 && armed)
+            if (input > 48 && armed) // 油门大于最小启动值 && ESC 已经解锁
             {
-
-                if (input > 48 && input < 137)
-                { // sine wave stepper
-
+                if (input > 48 && input < 137) // 开环正弦启动，转速由油门决定，不依赖 BEMF
+                {
                     if (do_once_sinemode)
                     {
-                        COM_TIMER->DIER &= ~((0x1UL << (0U))); // disable commutation interrupt in case set
-                        maskPhaseInterrupts();
+                        COM_TIMER->DIER &= ~((0x1UL << (0U))); // 关闭换相中断
+                        maskPhaseInterrupts();                 // 关闭比较器中断
+
+                        // 让三相 PWM 占空比先归零，给正弦启动一个干净的初始状态，避免模式切换时产生电流冲击
                         TIM1->CCR1 = 0;
                         TIM1->CCR2 = 0;
                         TIM1->CCR3 = 0;
-                        allpwm();
-                        do_once_sinemode = 0;
+
+                        allpwm(); // 进入三相正弦 PWM 模式
+
+                        do_once_sinemode = 0; // 确保同一启动过程中不再重复初始化
                     }
-                    advanceincrement();
-                    step_delay = map(input, 48, 120, 7000 / motor_poles, 810 / motor_poles);
-                    delayMicros(step_delay);
-                    e_rpm = 600 / step_delay; // in hundreds so 33 e_rpm is 3300 actual erpm
+
+                    advanceincrement();                                                      // 推进一歩正弦相位
+                    step_delay = map(input, 48, 120, 7000 / motor_poles, 810 / motor_poles); // 随油门从 48→120 线性减小：转速逐渐加
+                    delayMicros(step_delay);                                                 // 延时等待
+                    e_rpm = 600 / step_delay;                                                // 估算电气转速 e_rpm
                 }
                 else
                 {
-                    do_once_sinemode = 1;
-                    advanceincrement();
+                    do_once_sinemode = 1; // 下次再跌回正弦区时重新初始化
+                    advanceincrement();   // 继续推进正弦相位
                     if (input > 200)
                     {
+                        // 如果油门很大（>200）
+                        // 强制把 A 相相位归零并把步进延时降到 80，准备立即切出正弦模式
                         phase_A_position = 0;
                         step_delay = 80;
                     }
 
                     delayMicros(step_delay);
-                    if (phase_A_position == 0)
+                    if (phase_A_position == 0) // 当 A 相相位回到 0 时，认为正弦波完成了一个完整周期，可以干净地切换到六步换相
                     {
-                        stepper_sine = 0;
-                        running = 1;
-                        old_routine = 1;
+                        stepper_sine = 0; // 退出正弦模式
+                        running = 1;      // 进入正常运行
+                        old_routine = 1;  // 使用旧版换相例程
                         commutation_interval = 9000;
                         average_interval = 9000;
                         last_average_interval = average_interval;
-                        INTERVAL_TIMER->CNT = 9000;
-                        zero_crosses = 10;
-                        prop_brake_active = 0;
-                        step = changeover_step; // rising bemf on a same as position 0.
-                                                // comStep(step);// rising bemf on a same as position 0.
+                        INTERVAL_TIMER->CNT = 9000; // 初始化换相间隔定时器
+                        zero_crosses = 10;          // 让 BEMF 检测认为已经稳定
+                        prop_brake_active = 0;      // 关闭比例制动
+                        step = changeover_step;     // 设置到与正弦 0 位置对齐的六步状态
+
                         if (stall_protection)
                         {
+                            // 防止低速重载下电机堵转的功能开关，主要用于 crawler / RC 车 等需要大扭矩低速运行的场景，不用于多旋翼
+                            // 核心作用：转速越低，自动加大油门
                             minimum_duty_cycle = stall_protect_minimum_duty;
                         }
-                        commutate();
+
+                        commutate(); // 执行第一次六步换相
                         // enableCompInterrupts();
-                        LL_TIM_GenerateEvent_UPDATE(TIM1);
+                        LL_TIM_GenerateEvent_UPDATE(TIM1); // 强制 TIM1 更新，让新占空比/死区立即生效
                         //	  zcfoundroutine();
                     }
                 }
             }
-            else
+            else // 电机当前处于正弦模式，但油门 ≤ 48 或 ESC 未解锁。也就是正弦模式下松油门/未解锁时的停机处理
             {
-                do_once_sinemode = 1;
-                if (brake_on_stop)
+                do_once_sinemode = 1; // // 重置正弦初始化标志，下次再进入正弦区时重新初始化
+
+                if (brake_on_stop) //  停止时主动制动
                 {
 #ifndef PWM_ENABLE_BRIDGE
                     duty_cycle = (TIMER1_MAX_ARR - 19) + drag_brake_strength * 2;
@@ -2470,7 +2597,7 @@ int main(void)
                     // todo add braking for PWM /enable style bridges.
 #endif
                 }
-                else
+                else // 停止时自由滑行
                 {
                     TIM1->CCR1 = 0;
                     TIM1->CCR2 = 0;
