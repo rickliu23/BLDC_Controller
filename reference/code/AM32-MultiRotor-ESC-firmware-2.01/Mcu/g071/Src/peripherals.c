@@ -5,7 +5,6 @@
  *      Author: Alka
  */
 
-
 // PERIPHERAL SETUP
 
 #include "peripherals.h"
@@ -16,16 +15,16 @@
 #include "WS2812.h"
 #endif
 
-//extern uint16_t DEAD_TIME;
+// extern uint16_t DEAD_TIME;
 
-
-void initCorePeripherals(void){
+void initCorePeripherals(void)
+{
 
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
   LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
   LL_SYSCFG_EnablePinRemap(LL_SYSCFG_PIN_RMP_PA11);
   LL_SYSCFG_EnablePinRemap(LL_SYSCFG_PIN_RMP_PA12);
-  FLASH->ACR |= FLASH_ACR_PRFTEN;   //// prefetch buffer enable
+  FLASH->ACR |= FLASH_ACR_PRFTEN; //// prefetch buffer enable
   SystemClock_Config();
   MX_GPIO_Init();
   MX_DMA_Init();
@@ -46,34 +45,34 @@ void initCorePeripherals(void){
   MX_TIM6_Init();
   telem_UART_Init();
 #ifdef USE_LED_STRIP
-WS2812_Init();
+  WS2812_Init();
 #endif
-
 }
 
-void initAfterJump(){
+void initAfterJump()
+{
 
-	SCB->VTOR = 0x08001000;
-    __enable_irq();
+  SCB->VTOR = 0x08001000;
+  __enable_irq();
 }
 
 void SystemClock_Config(void)
 {
   LL_FLASH_SetLatency(LL_FLASH_LATENCY_2);
-  if(LL_FLASH_GetLatency() != LL_FLASH_LATENCY_2)
+  if (LL_FLASH_GetLatency() != LL_FLASH_LATENCY_2)
   {
-  //  Error_Handler();
+    //  Error_Handler();
   };
 
   /* HSI configuration and activation */
   LL_RCC_HSI_Enable();
-  while(LL_RCC_HSI_IsReady() != 1)
+  while (LL_RCC_HSI_IsReady() != 1)
   {
   };
 
   /* LSI configuration and activation */
   LL_RCC_LSI_Enable();
-  while(LL_RCC_LSI_IsReady() != 1)
+  while (LL_RCC_LSI_IsReady() != 1)
   {
   };
 
@@ -81,7 +80,7 @@ void SystemClock_Config(void)
   LL_RCC_PLL_ConfigDomain_SYS(LL_RCC_PLLSOURCE_HSI, LL_RCC_PLLM_DIV_1, 8, LL_RCC_PLLR_DIV_2);
   LL_RCC_PLL_Enable();
   LL_RCC_PLL_EnableDomain_SYS();
-  while(LL_RCC_PLL_IsReady() != 1)
+  while (LL_RCC_PLL_IsReady() != 1)
   {
   };
 
@@ -90,7 +89,7 @@ void SystemClock_Config(void)
 
   /* Sysclk activation on the main PLL */
   LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_PLL);
-  while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL)
+  while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL)
   {
   };
 
@@ -131,7 +130,6 @@ void MX_COMP1_Init(void)
   GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-
   /* USER CODE BEGIN COMP2_Init 1 */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
   /* USER CODE END COMP2_Init 1 */
@@ -149,7 +147,7 @@ void MX_COMP1_Init(void)
   /* Note: Variable divided by 2 to compensate partially CPU processing cycles */
   __IO uint32_t wait_loop_index = 0;
   wait_loop_index = (LL_COMP_DELAY_VOLTAGE_SCALER_STAB_US * (SystemCoreClock / (1000000 * 2)));
-  while(wait_loop_index != 0)
+  while (wait_loop_index != 0)
   {
     wait_loop_index--;
   }
@@ -160,11 +158,7 @@ void MX_COMP1_Init(void)
   NVIC_EnableIRQ(ADC1_COMP_IRQn);
   //__NVIC_EnableIRQ;
   /* USER CODE END COMP2_Init 2 */
-
 }
-
-
-
 
 void MX_COMP2_Init(void)
 {
@@ -194,15 +188,14 @@ void MX_COMP2_Init(void)
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 #ifndef N_VARIANT
   GPIO_InitStruct.Pin = LL_GPIO_PIN_3;
-    GPIO_InitStruct.Mode = LL_GPIO_MODE_ANALOG;
-    GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
-    LL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+  LL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 #endif
-    GPIO_InitStruct.Pin = LL_GPIO_PIN_7;
-       GPIO_InitStruct.Mode = LL_GPIO_MODE_ANALOG;
-       GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
-       LL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_7;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+  LL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN COMP2_Init 1 */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
@@ -221,7 +214,7 @@ void MX_COMP2_Init(void)
   /* Note: Variable divided by 2 to compensate partially CPU processing cycles */
   __IO uint32_t wait_loop_index = 0;
   wait_loop_index = (LL_COMP_DELAY_VOLTAGE_SCALER_STAB_US * (SystemCoreClock / (1000000 * 2)));
-  while(wait_loop_index != 0)
+  while (wait_loop_index != 0)
   {
     wait_loop_index--;
   }
@@ -232,14 +225,13 @@ void MX_COMP2_Init(void)
   NVIC_EnableIRQ(ADC1_COMP_IRQn);
   //__NVIC_EnableIRQ;
   /* USER CODE END COMP2_Init 2 */
-
 }
 
 /**
-  * @brief IWDG Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief IWDG Initialization Function
+ * @param None
+ * @retval None
+ */
 void MX_IWDG_Init(void)
 {
 
@@ -263,14 +255,13 @@ void MX_IWDG_Init(void)
   /* USER CODE BEGIN IWDG_Init 2 */
 
   /* USER CODE END IWDG_Init 2 */
-
 }
 
 /**
-  * @brief TIM1 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM1 Initialization Function
+ * @param None
+ * @retval None
+ */
 void MX_TIM1_Init(void)
 {
 
@@ -322,7 +313,7 @@ void MX_TIM1_Init(void)
   TIM_OC_InitStruct.OCNState = LL_TIM_OCSTATE_DISABLE;
   LL_TIM_OC_Init(TIM1, LL_TIM_CHANNEL_CH3, &TIM_OC_InitStruct);
   LL_TIM_OC_DisableFast(TIM1, LL_TIM_CHANNEL_CH3);
- 
+
   LL_TIM_OC_EnablePreload(TIM1, LL_TIM_CHANNEL_CH4);
   TIM_OC_InitStruct.OCState = LL_TIM_OCSTATE_DISABLE;
   TIM_OC_InitStruct.OCNState = LL_TIM_OCSTATE_DISABLE;
@@ -334,7 +325,7 @@ void MX_TIM1_Init(void)
   TIM_OC_InitStruct.OCNState = LL_TIM_OCSTATE_DISABLE;
   LL_TIM_OC_Init(TIM1, LL_TIM_CHANNEL_CH5, &TIM_OC_InitStruct);
   LL_TIM_OC_DisableFast(TIM1, LL_TIM_CHANNEL_CH5);
-  
+
   LL_TIM_SetTriggerOutput(TIM1, LL_TIM_TRGO_RESET);
   LL_TIM_SetTriggerOutput2(TIM1, LL_TIM_TRGO2_RESET);
   LL_TIM_DisableMasterSlaveMode(TIM1);
@@ -366,24 +357,24 @@ void MX_TIM1_Init(void)
   PA10 [PA12]   ------> TIM1_CH3
   */
 #ifdef PWM_ENABLE_BRIDGE
-  #define PHASE_C_GPIO_LOW PHASE_C_GPIO_ENABLE
-  #define PHASE_B_GPIO_LOW PHASE_B_GPIO_ENABLE
-  #define PHASE_A_GPIO_LOW PHASE_A_GPIO_ENABLE
-  #define PHASE_C_GPIO_PORT_LOW PHASE_C_GPIO_PORT_ENABLE
-  #define PHASE_B_GPIO_PORT_LOW PHASE_B_GPIO_PORT_ENABLE
-  #define PHASE_A_GPIO_PORT_LOW PHASE_A_GPIO_PORT_ENABLE
+#define PHASE_C_GPIO_LOW PHASE_C_GPIO_ENABLE
+#define PHASE_B_GPIO_LOW PHASE_B_GPIO_ENABLE
+#define PHASE_A_GPIO_LOW PHASE_A_GPIO_ENABLE
+#define PHASE_C_GPIO_PORT_LOW PHASE_C_GPIO_PORT_ENABLE
+#define PHASE_B_GPIO_PORT_LOW PHASE_B_GPIO_PORT_ENABLE
+#define PHASE_A_GPIO_PORT_LOW PHASE_A_GPIO_PORT_ENABLE
 
-  #define PHASE_C_GPIO_HIGH PHASE_C_GPIO_PWM
-  #define PHASE_B_GPIO_HIGH PHASE_B_GPIO_PWM
-  #define PHASE_A_GPIO_HIGH PHASE_A_GPIO_PWM
-  #define PHASE_C_GPIO_PORT_HIGH PHASE_C_GPIO_PORT_PWM
-  #define PHASE_B_GPIO_PORT_HIGH PHASE_B_GPIO_PORT_PWM
-  #define PHASE_A_GPIO_PORT_HIGH PHASE_A_GPIO_PORT_PWM
+#define PHASE_C_GPIO_HIGH PHASE_C_GPIO_PWM
+#define PHASE_B_GPIO_HIGH PHASE_B_GPIO_PWM
+#define PHASE_A_GPIO_HIGH PHASE_A_GPIO_PWM
+#define PHASE_C_GPIO_PORT_HIGH PHASE_C_GPIO_PORT_PWM
+#define PHASE_B_GPIO_PORT_HIGH PHASE_B_GPIO_PORT_PWM
+#define PHASE_A_GPIO_PORT_HIGH PHASE_A_GPIO_PORT_PWM
 #endif
 #ifndef OPEN_DRAIN_PWM
-  #define PWM_OUTPUT_TYPE LL_GPIO_OUTPUT_PUSHPULL
+#define PWM_OUTPUT_TYPE LL_GPIO_OUTPUT_PUSHPULL
 #else
-  #define PWM_OUTPUT_TYPE LL_GPIO_OUTPUT_OPENDRAIN
+#define PWM_OUTPUT_TYPE LL_GPIO_OUTPUT_OPENDRAIN
 #endif
 
   GPIO_InitStruct.Pin = PHASE_C_GPIO_LOW;
@@ -434,14 +425,13 @@ void MX_TIM1_Init(void)
   GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
   GPIO_InitStruct.Alternate = LL_GPIO_AF_2;
   LL_GPIO_Init(PHASE_A_GPIO_PORT_HIGH, &GPIO_InitStruct);
-
 }
 
 /**
-  * @brief TIM2 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM2 Initialization Function
+ * @param None
+ * @retval None
+ */
 void MX_TIM2_Init(void)
 {
 
@@ -469,14 +459,13 @@ void MX_TIM2_Init(void)
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
-
 }
 
 /**
-  * @brief TIM3 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM3 Initialization Function
+ * @param None
+ * @retval None
+ */
 void MX_TIM3_Init(void)
 {
 
@@ -544,7 +533,6 @@ void MX_TIM3_Init(void)
   /* USER CODE BEGIN TIM3_Init 2 */
 
   /* USER CODE END TIM3_Init 2 */
-
 }
 
 void MX_TIM16_Init(void)
@@ -568,7 +556,6 @@ void MX_TIM16_Init(void)
   GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
   GPIO_InitStruct.Alternate = LL_GPIO_AF_5;
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
 
   LL_DMA_SetPeriphRequest(DMA1, LL_DMA_CHANNEL_1, LL_DMAMUX_REQ_TIM16_CH1);
 
@@ -608,14 +595,13 @@ void MX_TIM16_Init(void)
   /* USER CODE BEGIN TIM3_Init 2 */
 
   /* USER CODE END TIM3_Init 2 */
-
 }
 
 /**
-  * @brief TIM14 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM14 Initialization Function
+ * @param None
+ * @retval None
+ */
 void MX_TIM14_Init(void)
 {
 
@@ -644,15 +630,13 @@ void MX_TIM14_Init(void)
   /* USER CODE BEGIN TIM14_Init 2 */
 
   /* USER CODE END TIM14_Init 2 */
-
 }
 
-
 /**
-  * @brief TIM17 Initialization Function
-  * @param None
-  * @retval None
-  */
+ * @brief TIM17 Initialization Function
+ * @param None
+ * @retval None
+ */
 void MX_TIM17_Init(void)
 {
 
@@ -678,12 +662,11 @@ void MX_TIM17_Init(void)
   /* USER CODE BEGIN TIM17_Init 2 */
 
   /* USER CODE END TIM17_Init 2 */
-
 }
 
 /**
-  * Enable DMA controller clock
-  */
+ * Enable DMA controller clock
+ */
 void MX_DMA_Init(void)
 {
 
@@ -698,14 +681,12 @@ void MX_DMA_Init(void)
   /* DMA1_Channel2_3_IRQn interrupt configuration */
   NVIC_SetPriority(DMA1_Channel2_3_IRQn, 1);
   NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
-
 }
 
 void MX_TIM6_Init(void)
 {
 
   LL_TIM_InitTypeDef TIM_InitStruct = {0};
-
 
   LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_TIM6);
 
@@ -720,8 +701,6 @@ void MX_TIM6_Init(void)
   LL_TIM_DisableARRPreload(TIM6);
   LL_TIM_SetTriggerOutput(TIM6, LL_TIM_TRGO_RESET);
   LL_TIM_DisableMasterSlaveMode(TIM6);
-
-
 }
 void MX_GPIO_Init(void)
 {
@@ -729,7 +708,4 @@ void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOA);
   LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOB);
-
 }
-
-

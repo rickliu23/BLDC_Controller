@@ -6,45 +6,40 @@
  */
 #include "ADC.h"
 
-
 #ifdef USE_ADC_INPUT
 uint16_t ADCDataDMA[4];
 #else
 uint16_t ADCDataDMA[3];
 #endif
 
-
 extern uint16_t ADC_raw_temp;
 extern uint16_t ADC_raw_volts;
 extern uint16_t ADC_raw_current;
 extern uint16_t ADC_raw_input;
 
-#define ADC_DELAY_CALIB_ENABLE_CPU_CYCLES  (LL_ADC_DELAY_CALIB_ENABLE_ADC_CYCLES * 64)
+#define ADC_DELAY_CALIB_ENABLE_CPU_CYCLES (LL_ADC_DELAY_CALIB_ENABLE_ADC_CYCLES * 64)
 
-
-
-void ADC_DMA_Callback(){  // read dma buffer and set extern variables
+void ADC_DMA_Callback()
+{ // read dma buffer and set extern variables
 
 #ifdef USE_ADC_INPUT
-	ADC_raw_temp =    ADCDataDMA[3];
-	ADC_raw_volts  = ADCDataDMA[1]/2;
-	ADC_raw_current =ADCDataDMA[2];
-	ADC_raw_input = ADCDataDMA[0];
-
+  ADC_raw_temp = ADCDataDMA[3];
+  ADC_raw_volts = ADCDataDMA[1] / 2;
+  ADC_raw_current = ADCDataDMA[2];
+  ADC_raw_input = ADCDataDMA[0];
 
 #else
-ADC_raw_temp =    ADCDataDMA[2];
-ADC_raw_volts  =  ADCDataDMA[1];
-ADC_raw_current = ADCDataDMA[0];
+  ADC_raw_temp = ADCDataDMA[2];
+  ADC_raw_volts = ADCDataDMA[1];
+  ADC_raw_current = ADCDataDMA[0];
 #endif
 }
 
+void enableADC_DMA()
+{ // enables channel
 
-
-void enableADC_DMA(){    // enables channel
-
-	NVIC_SetPriority(DMA1_Channel2_3_IRQn, 3);
-	NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
+  NVIC_SetPriority(DMA1_Channel2_3_IRQn, 3);
+  NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 
   LL_DMA_ConfigAddresses(DMA1,
                          LL_DMA_CHANNEL_2,
@@ -87,7 +82,7 @@ void activateADC(void)
     /* Enable ADC internal voltage regulator */
     LL_ADC_EnableInternalRegulator(ADC1);
     wait_loop_index = ((LL_ADC_DELAY_INTERNAL_REGUL_STAB_US * (SystemCoreClock / (100000 * 2))) / 10);
-    while(wait_loop_index != 0)
+    while (wait_loop_index != 0)
     {
       wait_loop_index--;
     }
@@ -101,7 +96,7 @@ void activateADC(void)
 
     while (LL_ADC_IsCalibrationOnGoing(ADC1) != 0)
     {
-   }
+    }
     /* Restore ADC DMA transfer request after calibration */
     LL_ADC_REG_SetDMATransfer(ADC1, backup_setting_adc_dma_transfer);
 
@@ -109,18 +104,17 @@ void activateADC(void)
     /* Note: Variable divided by 2 to compensate partially                    */
     /*       CPU processing cycles (depends on compilation optimization).     */
     wait_loop_index = (ADC_DELAY_CALIB_ENABLE_CPU_CYCLES >> 1);
-    while(wait_loop_index != 0)
+    while (wait_loop_index != 0)
     {
       wait_loop_index--;
     }
     /* Enable ADC */
     LL_ADC_Enable(ADC1);
-   while (LL_ADC_IsActiveFlag_ADRDY(ADC1) == 0)
+    while (LL_ADC_IsActiveFlag_ADRDY(ADC1) == 0)
     {
     }
-   ADC->CCR |= ADC_CCR_TSEN;
+    ADC->CCR |= ADC_CCR_TSEN;
   }
-
 }
 void ADC_Init(void)
 {
@@ -143,12 +137,10 @@ void ADC_Init(void)
   GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-
   GPIO_InitStruct.Pin = CURRENT_ADC_PIN;
   GPIO_InitStruct.Mode = LL_GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
 
   /* ADC1 DMA Init */
 
@@ -173,10 +165,10 @@ void ADC_Init(void)
 
   /* USER CODE END ADC1_Init 1 */
   /** Configure Regular Channel
-  */
+   */
   LL_ADC_SetCommonPathInternalCh(__LL_ADC_COMMON_INSTANCE(ADC1), LL_ADC_CHANNEL_TEMPSENSOR);
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-  */
+   */
   ADC_REG_InitStruct.TriggerSource = LL_ADC_REG_TRIG_SOFTWARE;
   ADC_REG_InitStruct.SequencerLength = LL_ADC_REG_SEQ_SCAN_ENABLE_3RANKS;
   ADC_REG_InitStruct.SequencerDiscont = LL_ADC_REG_SEQ_DISCONT_DISABLE;
@@ -184,7 +176,7 @@ void ADC_Init(void)
   ADC_REG_InitStruct.DMATransfer = LL_ADC_REG_DMA_TRANSFER_LIMITED;
   ADC_REG_InitStruct.Overrun = LL_ADC_REG_OVR_DATA_PRESERVED;
   LL_ADC_REG_Init(ADC1, &ADC_REG_InitStruct);
-  //LL_ADC_REG_SetTriggerEdge(ADC1, LL_ADC_REG_TRIG_EXT_FALLING);
+  // LL_ADC_REG_SetTriggerEdge(ADC1, LL_ADC_REG_TRIG_EXT_FALLING);
   LL_ADC_SetOverSamplingScope(ADC1, LL_ADC_OVS_DISABLE);
   LL_ADC_SetTriggerFrequencyMode(ADC1, LL_ADC_CLOCK_FREQ_MODE_LOW);
   LL_ADC_REG_SetSequencerConfigurable(ADC1, LL_ADC_REG_SEQ_CONFIGURABLE);
@@ -204,9 +196,7 @@ void ADC_Init(void)
 
   LL_ADC_REG_SetSequencerRanks(ADC1, LL_ADC_REG_RANK_2, VOLTAGE_ADC_CHANNEL);
   LL_ADC_SetChannelSamplingTime(ADC1, VOLTAGE_ADC_CHANNEL, LL_ADC_SAMPLINGTIME_COMMON_1);
- 
+
   LL_ADC_REG_SetSequencerRanks(ADC1, LL_ADC_REG_RANK_3, LL_ADC_CHANNEL_TEMPSENSOR);
   LL_ADC_SetChannelSamplingTime(ADC1, LL_ADC_CHANNEL_TEMPSENSOR, LL_ADC_SAMPLINGTIME_COMMON_2);
-
 }
-
