@@ -14,18 +14,9 @@
 # 目录说明
 
 BLDC_Controller/
-
-│
-
 ├── doc：存放文档
-
-│
-
 ├── hardware：存放PCB设计文件
 │   └── V1.0：第一版硬件
-
-│
-
 └── reference：第三方参考资料
     └── code：代码资料
-               └────  AM32-MultiRotor-ESC-firmware-2.01：AM32的固件代码
+        └── AM32-MultiRotor-ESC-firmware-2.01：AM32的固件代码
