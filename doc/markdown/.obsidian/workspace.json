@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "电流采样方式.md",
+                "file": "CurrentSampling.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "电流采样方式"
+              "title": "CurrentSampling"
             }
           }
         ]
@@ -183,12 +183,15 @@
       "bases:新建数据库": false
     }
   },
-  "active": "15486a972e6b81f0",
+  "active": "6220ba25677947b6",
   "lastOpenFiles": [
-    "attachments/Pasted image 20260617210824.png",
+    "attachments/highside.png",
     "attachments",
+    "attachments/highside.png",
+    "CurrentSampling.md",
+    "attachments/Pasted image 20260617211951.png",
+    "attachments/Pasted image 20260617210824.png",
     "Pasted image 20260617210646.png",
-    "电流采样方式.md",
     "Pasted image 20260617210502.png",
     "未命名"
   ]
