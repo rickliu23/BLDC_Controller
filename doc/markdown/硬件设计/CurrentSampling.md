@@ -3,7 +3,7 @@
 + 高侧采样
 
 # 2 低侧采样说明
-![](attachments/CurrentSampling.png)
+![](attachments/highside.png)
 
 + 可能是最常见的电流检测技术
 + 优点

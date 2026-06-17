@@ -13,7 +13,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "CurrentSampling.md",
+                "file": "硬件设计/CurrentSampling.md",
                 "mode": "source",
                 "source": false
               },
@@ -185,11 +185,14 @@
   },
   "active": "15486a972e6b81f0",
   "lastOpenFiles": [
+    "CurrentSampling.md",
+    "硬件设计/CurrentSampling.md",
+    "硬件设计/attachments/highside.png",
+    "硬件设计/attachments",
     "attachments/CurrentSampling.png",
     "attachments/highside.png",
     "attachments",
     "attachments/highside.png",
-    "CurrentSampling.md",
     "attachments/Pasted image 20260617211951.png",
     "attachments/Pasted image 20260617210824.png",
     "Pasted image 20260617210646.png",
