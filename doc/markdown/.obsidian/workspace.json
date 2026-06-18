@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "hardware/CMRR.md",
+                "file": "hardware/CurrentSense.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "CMRR"
+              "title": "CurrentSense"
             }
           }
         ]
@@ -185,21 +185,29 @@
   },
   "active": "e8089712550f4faf",
   "lastOpenFiles": [
+    "hardware/attachments/lowSideSingle.jpg",
+    "hardware/attachments/highSideSingle.jpg",
+    "hardware/attachments/inline.jpg",
+    "hardware/attachments/highSide.jpg",
+    "hardware/attachments/lowSide.jpg",
+    "hardware/drawio/inline.drawio",
+    "hardware/drawio/lowSide - 副本.drawio",
+    "hardware/drawio/lowSideSingle.drawio",
+    "hardware/drawio/lowSide.drawio",
+    "hardware/drawio/highSide.drawio",
+    "hardware/drawio/highSideSingle.drawio",
+    "hardware/drawio/highsidesingle.drawio",
+    "hardware/drawio/highside - 副本.drawio",
+    "hardware/attachments/highside.jpg",
+    "hardware/drawio/highside.drawio",
+    "hardware/drawio/lowside - 副本.drawio",
+    "hardware/attachments/lowside.jpg",
     "hardware/CurrentSense.md",
     "hardware/CMRR.md",
     "hardware/attachments/Pasted image 20260617222239.png",
     "hardware/attachments/inline.png",
     "hardware/attachments/highside.png",
     "hardware/attachments/lowside.png",
-    "CurrentSampling.md",
-    "hardware/attachments/highside.png",
-    "hardware/attachments",
-    "attachments/CurrentSampling.png",
-    "attachments/highside.png",
-    "attachments",
-    "attachments/highside.png",
-    "attachments/Pasted image 20260617211951.png",
-    "attachments/Pasted image 20260617210824.png",
-    "未命名"
+    "CurrentSampling.md"
   ]
 }
