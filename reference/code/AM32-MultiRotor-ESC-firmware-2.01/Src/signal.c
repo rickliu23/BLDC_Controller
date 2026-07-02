@@ -168,41 +168,42 @@ void computeServoInput()
 #endif
 }
 
+// 外部输入信号捕获完成
 void transfercomplete()
 {
-	if (armed && dshot_telemetry)
+	if (armed && dshot_telemetry) // 已解锁且双向
 	{
 		if (out_put)
 		{
-
+			// 发送完毕，切换回接受
 			receiveDshotDma();
 
 			return;
 		}
 		else
 		{
-
+			// 先发送上一帧数据，再准备当前帧数据？
 			sendDshotDma();
 			make_dshot_package();
-			computeDshotDMA();
 
-			return;
+			computeDshotDMA(); // 解码飞控发过来的 DShot 命令
+
+			return; // 直接返回
 		}
 	}
 
-	if (inputSet == 0)
+	if (inputSet == 0) // 还不知道是什么协议格式
 	{
-		detectInput();
-		receiveDshotDma();
+		detectInput();	   // 分析协议
+		receiveDshotDma(); // 启动下一次DMA接收
 		return;
 	}
 
-	if (inputSet == 1)
+	if (inputSet == 1) // 已经知道是什么协议
 	{
-
-		if (dshot_telemetry)
+		if (dshot_telemetry) // 双向协议
 		{
-			if (out_put)
+			if (out_put) // 当前是输出模式
 			{
 				//    	TIM17->CNT = 0;
 				make_dshot_package(); // this takes around 10us !!
@@ -216,31 +217,43 @@ void transfercomplete()
 				return;
 			}
 		}
-		else
+		else // 单向协议
 		{
-
-			if (dshot == 1)
+			if (dshot == 1) // DShot协议
 			{
-				computeDshotDMA();
+				computeDshotDMA(); // 解码飞控发过来的 DShot 命令
 				if (send_telemetry)
 				{
 					// done in 10khz routine
 				}
-				receiveDshotDma();
+				receiveDshotDma(); // 继续接收
 			}
-			if (servoPwm == 1)
+
+			if (servoPwm == 1) // servoPwm协议
 			{
+				// 确保当前 PWM 脉冲已经结束，避免在引脚还是高电平时重新配置定时器，导致捕获错误
 				while ((INPUT_PIN_PORT->IDR & INPUT_PIN))
 				{ // if the pin is high wait
 				}
+
+				// 计算脉宽
 				computeServoInput();
 
+				// 重置捕获极性为上升沿
 				LL_TIM_IC_SetPolarity(IC_TIMER_REGISTER, IC_TIMER_CHANNEL, LL_TIM_IC_POLARITY_RISING); // setup rising pin trigger.
+
+				// 重新启动DMA接收
 				receiveDshotDma();
+
+				// 使能半传输中断
+				// 第一次捕获到上升沿时，DMA 搬完 1 个数据，触发半传输中断。
+				// 中断里把极性切换成 下降沿触发。
+				// 第二次捕获到下降沿时，DMA 搬完第 2 个数据，触发传输完成中断，进入 transfercomplete()。
 				LL_DMA_EnableIT_HT(DMA1, INPUT_DMA_CHANNEL);
 			}
 		}
-		if (!armed)
+
+		if (!armed) // 还没解锁
 		{
 			if (adjusted_input < 0)
 			{

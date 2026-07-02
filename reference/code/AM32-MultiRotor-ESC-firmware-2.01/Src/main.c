@@ -431,7 +431,7 @@ char prop_brake_active = 0; // 当前是否需要制动
 
 uint8_t eepromBuffer[176] = {0};
 
-char dshot_telemetry = 0;
+char dshot_telemetry = 0; // 0：单向，只通过该线接收油门数据， 1：双向，也通过该线对外发送温度、转速等数据
 
 uint8_t last_dshot_command = 0;
 char old_routine = 0; // 为0时，使用中断自动比较过零点； 为1时，在main中轮询过零点
@@ -531,8 +531,8 @@ uint16_t zero_input_count = 0; // 是连续检测到"油门为 0"的计数器，
 
 uint16_t input = 0;
 uint16_t newinput = 0;
-char inputSet = 0;
-char dshot = 0;
+char inputSet = 0; // 0=未识别输入协议，1 = 已经识别输入协议（DShot / Servo PWM / CRSF / ADC 等）
+char dshot = 0;    // 当前输入信号协议是DShot 数字协议
 char servoPwm = 0;
 uint32_t zero_crosses; // 累计检测到的 BEMF 过零点次数，用于判断是否进入稳定运行
 
@@ -1044,7 +1044,7 @@ void commutate()
     }
 }
 
-// 换向延时到了
+// 换向延时到了，执行换向操作
 void PeriodElapsedCallback()
 {
     // 关闭 COM_TIMER 自身的更新中断，防止这次中断还没处理完又重复触发。

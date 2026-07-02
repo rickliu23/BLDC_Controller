@@ -19,7 +19,7 @@ char output_timer_prescaler;
 int buffersize = 32;
 int smallestnumber = 20000;
 uint32_t dma_buffer[64] = {0};
-char out_put = 0;
+char out_put = 0; // 当前DMA方向，0 = 输入接收， 1 = 发送
 char buffer_divider = 44;
 int dshot_runout_timer = 62500;
 uint16_t average_signal_pulse = 0;
